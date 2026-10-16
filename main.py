@@ -57,15 +57,71 @@ y = yearly["연평균기온"].to_numpy(dtype=float)
 slope, intercept = np.polyfit(x, y, 1)
 r = float(np.corrcoef(x, y)[0, 1])
 
+# 최근 20년(끝 연도 포함 20개 연도 구간)만으로 구한 기울기
+RECENT_YEARS = 20
+recent_mask = x >= x.max() - (RECENT_YEARS - 1)
+x_rec, y_rec = x[recent_mask], y[recent_mask]
+has_recent = len(x_rec) >= 3
+if has_recent:
+    slope_rec, _ = np.polyfit(x_rec, y_rec, 1)
+    r_rec = float(np.corrcoef(x_rec, y_rec)[0, 1])
+
 # ---- 직선 정보 ----
 c1, c2, c3 = st.columns(3)
 c1.metric("직선을 만든 해의 개수", f"{len(yearly)}개")
 c2.metric("시작 연도", f"{int(x.min())}년")
 c3.metric("끝 연도", f"{int(x.max())}년")
 
-c4, c5 = st.columns(2)
-c4.metric("상관계수 (연도 vs 연평균기온)", f"{r:.3f}")
-c5.metric("기울기", f"{slope * 10:+.2f} ℃ / 10년")
+st.metric("상관계수 (연도 vs 연평균기온)", f"{r:.3f}")
+
+st.divider()
+st.subheader("100년에 몇 도 오르는가?")
+
+
+def big_slope_card(title: str, sub: str, value: float) -> str:
+    return f"""
+    <div style="text-align:center; padding:1rem 0.5rem; border:1px solid rgba(128,128,128,0.35);
+                border-radius:12px;">
+      <div style="font-size:1rem; font-weight:600;">{title}</div>
+      <div style="font-size:0.85rem; opacity:0.65;">{sub}</div>
+      <div style="font-size:3rem; font-weight:800; line-height:1.2;">{value:+.2f} ℃</div>
+      <div style="font-size:0.85rem; opacity:0.65;">/ 100년</div>
+    </div>
+    """
+
+
+col_all, col_rec = st.columns(2)
+with col_all:
+    st.markdown(
+        big_slope_card(
+            "전체 기간", f"{int(x.min())}~{int(x.max())}년 ({len(x)}개 해)", slope * 100
+        ),
+        unsafe_allow_html=True,
+    )
+with col_rec:
+    if has_recent:
+        st.markdown(
+            big_slope_card(
+                f"최근 {RECENT_YEARS}년",
+                f"{int(x_rec.min())}~{int(x_rec.max())}년 ({len(x_rec)}개 해)",
+                slope_rec * 100,
+            ),
+            unsafe_allow_html=True,
+        )
+    else:
+        st.warning("최근 20년 구간에 해가 3개 미만이라 계산하지 않았습니다.")
+
+if has_recent:
+    diff = (slope_rec - slope) * 100
+    ratio_txt = f" (전체 기간의 약 {slope_rec / slope:.1f}배)" if slope > 0 else ""
+    st.markdown(
+        f"최근 {RECENT_YEARS}년 기울기가 전체 기간보다 **{diff:+.2f} ℃ / 100년** 차이 나요{ratio_txt}. "
+        f"상관계수는 전체 {r:.3f}, 최근 {RECENT_YEARS}년 {r_rec:.3f}입니다."
+    )
+    st.caption(
+        f"최근 {RECENT_YEARS}년은 데이터 수가 적어 기울기가 해마다 크게 흔들릴 수 있습니다. "
+        "짧은 구간의 값을 100년으로 환산한 것이라 그대로 미래 예측으로 받아들이면 안 돼요."
+    )
 
 st.caption(
     f"사용 기준: {LAST_YEAR}년까지의 데이터, 관측일 {MIN_DAYS}일 이상인 해만 포함. "
